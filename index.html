@@ -1,0 +1,1438 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Cube Net + Exhibition UI (Merged)</title>
+
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+      "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+    }
+  }
+  </script>
+
+  <link rel="icon" href="data:,">
+
+  <style>
+    /* ✅ 변경사항: 배경색을 화이트(#fff)로 변경 */
+    html, body { margin:0; height:100%; overflow:hidden; background:#fff; }
+
+    /* ✅ 모바일 주소창/툴바 변동 대응 (vh 대신 dvh/svh) */
+    /* ✅ (변경) svh를 fallback으로 두고 dvh가 최종 적용되도록 순서 수정 */
+    body {
+      height: 100vh;
+      height: 100svh;
+      height: 100dvh;
+    }
+
+    /* ✅ 캔버스를 화면에 딱 붙이기 */
+    canvas {
+      position: fixed;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      display: block;
+      touch-action: none; /* OrbitControls 제스처 충돌 감소 */
+    }
+
+    /* 상단 힌트 */
+    #hint{
+      position:fixed;
+      left: calc(12px + env(safe-area-inset-left));
+      top:  calc(12px + env(safe-area-inset-top));
+      padding: 8px 10px;
+      font: 14px/1.3 system-ui, sans-serif;
+      background: rgba(0,0,0,0.55);
+      color:#fff;
+      border-radius: 8px;
+      z-index: 10;
+    }
+
+    /* ✅ 하단 중앙 네비게이션 (< ? >) */
+    #nav{
+      position:fixed;
+      left:50%;
+      bottom: calc(12px + env(safe-area-inset-bottom));
+      transform: translateX(-50%);
+      display:flex;
+      gap:10px;
+      align-items:center;
+      justify-content:center;
+      z-index:10;
+      padding: 8px 10px;
+      border-radius: 14px;
+      background: rgba(0,0,0,0.28);
+      backdrop-filter: blur(6px);
+      -webkit-backdrop-filter: blur(6px);
+      border: 1px solid rgba(255,255,255,0.10);
+    }
+
+    #nav button{
+      width:48px;
+      height:44px;
+      padding:0;
+      display:grid;
+      place-items:center;
+      font: 700 18px/1 system-ui, sans-serif;
+      background: rgba(0,0,0,0.55);
+      color:#fff;
+      border:1px solid rgba(255,255,255,0.15);
+      border-radius:14px;
+      cursor:pointer;
+      user-select:none;
+      -webkit-tap-highlight-color: transparent;
+    }
+    #nav button:hover{ background: rgba(0,0,0,0.7); }
+    #nav button:disabled{ opacity:0.35; cursor:default; }
+
+    /* ✅ (추가) 하단 좌측 홈(초기화) 버튼 */
+    #btnHome{
+      position:fixed;
+      left: calc(12px + env(safe-area-inset-left));
+      bottom: calc(12px + env(safe-area-inset-bottom));
+      width:48px;
+      height:44px;
+      padding:0;
+      display:grid;
+      place-items:center;
+      font: 700 18px/1 system-ui, sans-serif;
+      background: rgba(0,0,0,0.55);
+      color:#fff;
+      border: 1px solid rgba(255,255,255,0.15);
+      border-radius:14px;
+      cursor:pointer;
+      user-select:none;
+      -webkit-tap-highlight-color: transparent;
+      z-index:10;
+    }
+    #btnHome:hover{ background: rgba(0,0,0,0.7); }
+
+    /* ✅ (추가) 하단 우측 작가 정보 버튼 */
+    #btnArtist{
+      position:fixed;
+      right: calc(12px + env(safe-area-inset-right));
+      bottom: calc(12px + env(safe-area-inset-bottom));
+      width:48px;
+      height:44px;
+      padding:0;
+      display:grid;
+      place-items:center;
+      font: 700 18px/1 system-ui, sans-serif;
+      background: rgba(0,0,0,0.55);
+      color:#fff;
+      border: 1px solid rgba(255,255,255,0.15);
+      border-radius:14px;
+      cursor:pointer;
+      user-select:none;
+      -webkit-tap-highlight-color: transparent;
+      z-index:10;
+    }
+    #btnArtist:hover{ background: rgba(0,0,0,0.7); }
+
+    /* =========================================================
+      ✅ (추가) 버튼 "은은한 눌림" 피드백 (Y 이동 없이)
+      - pointerdown 시 JS가 .is-pressed를 붙이고, pointerup/cancel 시 제거
+      - :focus-visible은 키보드 접근성용
+    ========================================================= */
+    #nav button, #btnHome, #btnArtist{
+      transition: transform 120ms ease, filter 120ms ease, box-shadow 120ms ease, background 120ms ease;
+      will-change: transform;
+      touch-action: manipulation;
+      box-shadow:
+        0 6px 14px rgba(0,0,0,0.22),
+        0 1px 0 rgba(255,255,255,0.06) inset;
+    }
+
+    #nav button:active,
+    #btnHome:active,
+    #btnArtist:active,
+    #nav button.is-pressed,
+    #btnHome.is-pressed,
+    #btnArtist.is-pressed{
+      transform: scale(0.92);
+      filter: brightness(0.90);
+      box-shadow:
+        0 3px 8px rgba(0,0,0,0.18),
+        0 2px 8px rgba(0,0,0,0.36) inset;
+    }
+
+    #nav button:focus-visible,
+    #btnHome:focus-visible,
+    #btnArtist:focus-visible{
+      outline:none;
+      box-shadow:
+        0 6px 14px rgba(0,0,0,0.22),
+        0 1px 0 rgba(255,255,255,0.06) inset,
+        0 0 0 3px rgba(0,255,255,0.25);
+    }
+
+    /* ✅ 작품/작가 정보 패널 (중앙 오버레이) */
+    #info, #artistInfo{
+      position:fixed;
+      left:50%;
+      top:50%;
+      transform: translate(-50%, -50%);
+      width: min(520px, calc(100vw - 24px));
+      padding: 14px 14px;
+      background: rgba(0,0,0,0.60);
+      color:#fff;
+      border: 1px solid rgba(255,255,255,0.15);
+      border-radius:14px;
+      z-index:10;
+      display:none;
+      max-height: min(70dvh, 640px);
+      overflow:auto;
+      -webkit-overflow-scrolling: touch;
+    }
+
+    #labelTitle, #artistLabelTitle{ font:700 14px/1.2 system-ui, sans-serif; margin:0 0 6px 0; }
+    #labelLine,  #artistLabelLine{  font:13px/1.25 system-ui, sans-serif; margin:0 0 6px 0; opacity:0.9; }
+    #labelMedium,#artistLabelMedium{font:13px/1.25 system-ui, sans-serif; margin:0 0 10px 0; opacity:0.85; }
+    #labelDesc,  #artistLabelDesc{  font:14px/1.4 system-ui, sans-serif; margin:0; opacity:0.95; white-space:pre-wrap; word-break:keep-all; }
+
+    /* ✅ 로딩 오버레이 */
+    #loadingOverlay{
+      position:fixed;
+      inset:0;
+      background:#fff;
+      z-index:9999;
+      display:grid;
+      place-items:center;
+      opacity:1;
+      transition: opacity 420ms ease;
+    }
+    #loadingOverlay.is-hiding{
+      opacity:0;
+      pointer-events:none;
+    }
+    #loadingInner{
+      display:grid;
+      justify-items:center;
+      gap:12px;
+      color:#111;
+      font: 600 14px/1.3 system-ui, sans-serif;
+    }
+    #loadingLogo{
+      width:min(220px, 60vw);
+      height:auto;
+      display:block;
+    }
+
+    /* =========================================================
+      ✅ (추가) 전개도에서만 UI(버튼/네비) 보이기
+      - 큐브(접힘) 상태: 숨김
+      - 전개(펼침) 상태: 표시
+    ========================================================= */
+    #nav, #btnHome, #btnArtist { display: none; }
+    body.ui-unfolded #nav { display: flex; }
+    body.ui-unfolded #btnHome,
+    body.ui-unfolded #btnArtist { display: grid; }
+
+    @media (max-width: 480px){
+      #nav button, #btnHome, #btnArtist{ width:46px; height:42px; }
+      #info, #artistInfo{ width:min(520px, calc(100vw - 18px)); }
+    }
+  </style>
+</head>
+
+<body>
+  <!-- ✅ 로딩 오버레이(로고는 선택) -->
+  <div id="loadingOverlay" aria-live="polite" aria-label="Loading">
+    <div id="loadingInner">
+      <img id="loadingLogo" src="./textures/logo.png" alt="logo" onerror="this.style.display='none'">
+      <div>Loading…</div>
+    </div>
+  </div>
+
+  <div id="hint">Click cube: 접힘/전개 • (전개 후) Click artwork: 줌인 • ‹/›: 작품 이동 • ?: 정보</div>
+
+  <!-- ✅ 작품 정보 -->
+  <div id="info" role="dialog" aria-live="polite">
+    <div id="labelTitle"></div>
+    <div id="labelLine"></div>
+    <div id="labelMedium"></div>
+    <p id="labelDesc"></p>
+  </div>
+
+  <!-- ✅ 작가 정보 -->
+  <div id="artistInfo" role="dialog" aria-live="polite">
+    <div id="artistLabelTitle"></div>
+    <div id="artistLabelLine"></div>
+    <div id="artistLabelMedium"></div>
+    <p id="artistLabelDesc"></p>
+  </div>
+
+  <button id="btnHome" aria-label="Home">⌂</button>
+  <button id="btnArtist" aria-label="Artist info">i</button>
+
+  <div id="nav" aria-label="Navigation">
+    <button id="btnPrev" aria-label="Previous">&lt;</button>
+    <button id="btnInfo" aria-label="Toggle info">?</button>
+    <button id="btnNext" aria-label="Next">&gt;</button>
+  </div>
+
+  <script type="module">
+    import * as THREE from "three";
+    import { OrbitControls } from "three/addons/controls/OrbitControls.js";
+    // ✅ 변경사항: HDR(.hdr) 없이도 실제감(간접광/반사)을 주는 환경(IBL) 생성용
+    import { RoomEnvironment } from "three/addons/environments/RoomEnvironment.js";
+
+    // =========================================================
+    // ✅ UI/오버레이 DOM
+    // =========================================================
+    const loadingOverlay = document.getElementById("loadingOverlay");
+
+    const infoEl = document.getElementById("info");
+    const titleEl = document.getElementById("labelTitle");
+    const lineEl = document.getElementById("labelLine");
+    const mediumEl = document.getElementById("labelMedium");
+    const descEl = document.getElementById("labelDesc");
+
+    const artistInfoEl = document.getElementById("artistInfo");
+    const artistTitleEl = document.getElementById("artistLabelTitle");
+    const artistLineEl = document.getElementById("artistLabelLine");
+    const artistMediumEl = document.getElementById("artistLabelMedium");
+    const artistDescEl = document.getElementById("artistLabelDesc");
+
+    const btnPrev = document.getElementById("btnPrev");
+    const btnInfo = document.getElementById("btnInfo");
+    const btnNext = document.getElementById("btnNext");
+    const btnHome = document.getElementById("btnHome");
+    const btnArtist = document.getElementById("btnArtist");
+
+    function hideLoadingOverlay(){
+      if (!loadingOverlay) return;
+      if (loadingOverlay.dataset.hiding === "1") return;
+      loadingOverlay.dataset.hiding = "1";
+      loadingOverlay.classList.add("is-hiding");
+
+      const onEnd = (e) => {
+        if (e.target !== loadingOverlay) return;
+        loadingOverlay.removeEventListener("transitionend", onEnd);
+        loadingOverlay.remove();
+      };
+      loadingOverlay.addEventListener("transitionend", onEnd);
+
+      setTimeout(() => {
+        if (document.body.contains(loadingOverlay)) loadingOverlay.remove();
+      }, 700);
+    }
+
+    function hideInfo(){ infoEl.style.display = "none"; }
+    function hideArtistInfo(){ artistInfoEl.style.display = "none"; }
+
+    // ✅ 작가 정보(2번 구조 그대로)
+    const ARTIST_TEXT = {
+      title: "작가 정보",
+      line: "장(예시) · 인터페이스 이식",
+      medium: "",
+      desc:
+`여기에 작가 소개/약력 텍스트를 넣으면 됩니다.
+
+- i : 작가 정보 토글
+- ? : 현재 작품 정보 토글
+- ‹/› : 작품(벽면) 순환 포커스
+- ⌂ : 초기 카메라로 복귀`
+    };
+
+    function showArtistInfo(){
+      artistTitleEl.textContent = ARTIST_TEXT.title ?? "";
+      artistLineEl.textContent = ARTIST_TEXT.line ?? "";
+      artistMediumEl.textContent = ARTIST_TEXT.medium ?? "";
+      artistDescEl.textContent = ARTIST_TEXT.desc ?? "";
+      artistInfoEl.style.display = "block";
+    }
+    function toggleArtistInfo(){
+      hideInfo();
+      if (artistInfoEl.style.display === "block") hideArtistInfo();
+      else showArtistInfo();
+    }
+
+    // =========================================================
+    // ✅ UI: 더블탭 확대 방지 + 눌림 피드백
+    // =========================================================
+    function preventDoubleTapZoomOn(el){
+      if (!el) return;
+      let lastTap = 0;
+      el.addEventListener("touchend", (e) => {
+        const now = Date.now();
+        if (now - lastTap <= 300) e.preventDefault();
+        lastTap = now;
+      }, { passive:false });
+    }
+    preventDoubleTapZoomOn(document.getElementById("nav"));
+    preventDoubleTapZoomOn(btnHome);
+    preventDoubleTapZoomOn(btnArtist);
+
+    function addPressFeedback(el){
+      if (!el) return;
+      const down = () => el.classList.add("is-pressed");
+      const up = () => el.classList.remove("is-pressed");
+
+      el.addEventListener("pointerdown", down);
+      el.addEventListener("pointerup", up);
+      el.addEventListener("pointercancel", up);
+      el.addEventListener("pointerleave", up);
+
+      window.addEventListener("pointerup", up);
+      window.addEventListener("pointercancel", up);
+    }
+    [btnPrev, btnInfo, btnNext, btnHome, btnArtist].forEach(addPressFeedback);
+
+    // =========================================================
+    // ✅ Three 기본 세팅
+    // =========================================================
+    const renderer = new THREE.WebGLRenderer({ antialias:true });
+    renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+    renderer.outputColorSpace = THREE.SRGBColorSpace;
+    renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    renderer.toneMappingExposure = 1.12;
+
+    renderer.setClearColor(0xffffff, 1);
+    renderer.shadowMap.enabled = true;
+    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+
+    document.body.appendChild(renderer.domElement);
+
+    const scene = new THREE.Scene();
+
+    // ✅ IBL(환경맵) 적용 (배경은 흰색 유지)
+    const pmrem = new THREE.PMREMGenerator(renderer);
+    const envRT = pmrem.fromScene(new RoomEnvironment(), 0.04);
+    scene.environment = envRT.texture;
+    // ✅ (변경사항) envRT.dispose()가 environment 텍스처까지 정리해버려
+    // MeshStandardMaterial(프러스텀/벽)이 "쌔카맣게" 보일 수 있어 제거/주석 처리
+    // envRT.dispose();
+    pmrem.dispose();
+
+    const camera = new THREE.PerspectiveCamera(50, 1, 0.1, 100);
+    camera.position.set(4.2, 3.2, 4.2);
+
+    const controls = new OrbitControls(camera, renderer.domElement);
+    controls.enableDamping = true;
+    controls.dampingFactor = 0.08;
+    controls.target.set(0, 0, 0);
+    controls.update();
+
+    // ✅ OrbitControls 조작 중 리사이즈/리핏 가드
+    let isUserControlling = false;
+    controls.addEventListener("start", () => { isUserControlling = true; });
+    controls.addEventListener("end", () => { isUserControlling = false; });
+
+    // ✅ 라이트 보강
+    scene.add(new THREE.AmbientLight(0xffffff, 0.32));
+    scene.add(new THREE.HemisphereLight(0xffffff, 0xdfe9ff, 0.35));
+
+    const dir = new THREE.DirectionalLight(0xffffff, 1.25);
+    dir.position.set(4, 6, 3);
+    dir.castShadow = true;
+    dir.shadow.mapSize.set(2048, 2048);
+    dir.shadow.camera.near = 0.5;
+    dir.shadow.camera.far = 30;
+    dir.shadow.camera.left = -10;
+    dir.shadow.camera.right = 10;
+    dir.shadow.camera.top = 10;
+    dir.shadow.camera.bottom = -10;
+    dir.shadow.bias = -0.0002;
+    scene.add(dir);
+
+    // ✅ 바닥: "진짜 #fff" + 그림자만
+    const floorGeo = new THREE.PlaneGeometry(20, 20);
+
+    const floorWhiteMat = new THREE.MeshBasicMaterial({ color: 0xffffff, side: THREE.DoubleSide });
+    floorWhiteMat.toneMapped = false;
+    const floorWhite = new THREE.Mesh(floorGeo, floorWhiteMat);
+    floorWhite.rotation.x = -Math.PI / 2;
+    floorWhite.position.y = -1.2;
+    floorWhite.renderOrder = 0;
+    scene.add(floorWhite);
+
+    const shadowMat = new THREE.ShadowMaterial({ opacity: 0.18 });
+    shadowMat.depthWrite = false;
+    shadowMat.toneMapped = false;
+    const shadowPlane = new THREE.Mesh(floorGeo, shadowMat);
+    shadowPlane.rotation.x = -Math.PI / 2;
+    shadowPlane.position.y = -1.2 + 0.001;
+    shadowPlane.receiveShadow = true;
+    shadowPlane.renderOrder = 1;
+    scene.add(shadowPlane);
+
+    // ✅ LoadingManager
+    const manager = new THREE.LoadingManager();
+    manager.onLoad = () => hideLoadingOverlay();
+    manager.onError = () => hideLoadingOverlay();
+
+    // ---------- 머티리얼(라벨 텍스처) ----------
+    const makeMat = (color, label) => {
+      const c = document.createElement("canvas");
+      c.width = 256; c.height = 256;
+      const ctx = c.getContext("2d");
+      ctx.fillStyle = color;
+      ctx.fillRect(0,0,256,256);
+      ctx.fillStyle = "rgba(255,255,255,.9)";
+      ctx.font = "bold 56px system-ui";
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.fillText(label, 128, 128);
+
+      const tex = new THREE.CanvasTexture(c);
+      tex.colorSpace = THREE.SRGBColorSpace;
+      return new THREE.MeshStandardMaterial({ map: tex, side: THREE.DoubleSide });
+    };
+
+    // ---------- 크기 ----------
+    const SIZE = 1;
+    const HALF = SIZE/2;
+
+    // ✅ 고흐 썸네일 URL
+    const GOGH_ORIGINAL_URLS = [
+      "https://upload.wikimedia.org/wikipedia/commons/e/ea/Van_Gogh_-_Starry_Night_-_Google_Art_Project.jpg",
+      "https://upload.wikimedia.org/wikipedia/commons/f/fe/Vincent_van_Gogh_-_Sunflowers_%281888%2C_National_Gallery_London%29.jpg",
+      "https://upload.wikimedia.org/wikipedia/commons/0/0b/Vincent_van_Gogh_-_The_Bedroom_-_Google_Art_Project.jpg",
+      "https://upload.wikimedia.org/wikipedia/commons/3/3e/Irises-Vincent_van_Gogh.jpg",
+    ];
+    function toWikimediaThumbUrl(originalUrl, width = 512) {
+      const m = originalUrl.match(/^https?:\/\/upload\.wikimedia\.org\/wikipedia\/commons\/([^/]+)\/([^/]+)\/(.+)$/);
+      if (!m) return originalUrl;
+      const a = m[1], b = m[2], filename = m[3];
+      return `https://upload.wikimedia.org/wikipedia/commons/thumb/${a}/${b}/${filename}/${width}px-${filename}`;
+    }
+    const GOGH_THUMB_URLS = GOGH_ORIGINAL_URLS.map(u => toWikimediaThumbUrl(u, 512));
+
+    const ART_TEXT = [
+      { title:"Starry Night", artist:"Vincent van Gogh", year:"1889", medium:"Oil on canvas", desc:"(예시) 작품 설명을 여기에 넣으세요." },
+      { title:"Sunflowers", artist:"Vincent van Gogh", year:"1888", medium:"Oil on canvas", desc:"(예시) 작품 설명을 여기에 넣으세요." },
+      { title:"The Bedroom", artist:"Vincent van Gogh", year:"1888", medium:"Oil on canvas", desc:"(예시) 작품 설명을 여기에 넣으세요." },
+      { title:"Irises", artist:"Vincent van Gogh", year:"1889", medium:"Oil on canvas", desc:"(예시) 작품 설명을 여기에 넣으세요." },
+    ];
+
+    const texLoader = new THREE.TextureLoader(manager);
+    const texCache = new Map();
+    function getTexture(url) {
+      if (texCache.has(url)) return texCache.get(url);
+
+      const tex = texLoader.load(
+        url,
+        (t) => {
+          t.colorSpace = THREE.SRGBColorSpace;
+          const maxAniso = renderer.capabilities.getMaxAnisotropy ? renderer.capabilities.getMaxAnisotropy() : 8;
+          t.anisotropy = Math.min(8, maxAniso);
+          t.needsUpdate = true;
+        },
+        undefined,
+        (err) => console.error("Texture load failed:", url, err)
+      );
+
+      tex.colorSpace = THREE.SRGBColorSpace;
+      texCache.set(url, tex);
+      return tex;
+    }
+
+    let artIndex = 0;
+    function nextArt() {
+      const idx = artIndex % GOGH_THUMB_URLS.length;
+      const url = GOGH_THUMB_URLS[idx];
+      artIndex++;
+      return { idx, url, tex: getTexture(url) };
+    }
+
+    // ✅ 생성된 작품 plane 저장
+    const artPlanes = [];
+    let currentArtIdx = -1;
+
+    function showArtInfoByIndex(i){
+      if (!artPlanes.length) return;
+
+      const idx = ((i % artPlanes.length) + artPlanes.length) % artPlanes.length;
+      const plane = artPlanes[idx];
+      const meta = plane.userData?.artMeta;
+      const d = meta ? ART_TEXT[meta.idx] : null;
+
+      titleEl.textContent = d?.title ?? "Artwork";
+      const y = d?.year ? ` (${d.year})` : "";
+      lineEl.textContent = `${d?.artist ?? ""}${y}`.trim();
+      mediumEl.textContent = d?.medium ?? "";
+      descEl.textContent = d?.desc ?? "";
+      infoEl.style.display = "block";
+    }
+
+    function toggleArtInfo(){
+      hideArtistInfo();
+      if (!artPlanes.length) return;
+      if (currentArtIdx < 0) currentArtIdx = 0;
+      if (infoEl.style.display === "block") hideInfo();
+      else showArtInfoByIndex(currentArtIdx);
+    }
+
+    // =========================================================
+    // ✅ (추가) 모바일/좁은 화면에서만 전개 중 줌아웃을 실행
+    // =========================================================
+    function isMobileView() {
+      return matchMedia("(pointer: coarse)").matches || matchMedia("(max-width: 768px)").matches;
+    }
+
+    // =========================================================
+    // ✅ 전개도 / 큐브 생성
+    // =========================================================
+    const root = new THREE.Group();
+    scene.add(root);
+    root.rotation.x = -Math.PI / 2;
+
+    const rootBasePos = root.position.clone();
+    const rootBaseScale = root.scale.clone();
+
+    // =========================================================
+    // ✅ (변경) 45° 조건 적용:
+    // - "대각선이 45도" => inset = height
+    // - 따라서 FRUSTUM.inset을 FRUSTUM.height와 동일하게 둔다.
+    // =========================================================
+    const FRUSTUM = {
+      inset: 0.06,     // ✅ 45° 조건: inset = height
+      height: 0.06,
+      color: 0x2d2d2d,
+      roughness: 0.95,
+      metalness: 0.0
+    };
+
+    // =========================================================
+    // ✅ (변경) 벽/프레임은 프러스텀 "윗면(더 작은 면)" 위에 서야 자연스럽다.
+    // - frustum inset이 작아지면 벽 inset도 같이 너무 커지면 답답해질 수 있음
+    // - 최소값을 0.10으로 낮춰 자연스럽게 따라가게 조정
+    // =========================================================
+    const WALL_INSET = Math.max(0.10, FRUSTUM.inset + 0.04);
+
+    function makeFrustumInsetGeometry({
+      size = SIZE,
+      inset = FRUSTUM.inset,
+      height = FRUSTUM.height
+    } = {}) {
+      const half = size / 2;
+      const topHalf = Math.max(0.001, half - inset);
+
+      const positions = new Float32Array([
+        -half, -half, 0,
+         half, -half, 0,
+         half,  half, 0,
+        -half,  half, 0,
+
+        -topHalf, -topHalf, height,
+         topHalf, -topHalf, height,
+         topHalf,  topHalf, height,
+        -topHalf,  topHalf, height,
+      ]);
+
+      const indices = [
+        // top
+        4,5,6,  4,6,7,
+        // sides
+        0,1,5,  0,5,4,
+        1,2,6,  1,6,5,
+        2,3,7,  2,7,6,
+        3,0,4,  3,4,7
+      ];
+
+      const geo = new THREE.BufferGeometry();
+      geo.setAttribute("position", new THREE.BufferAttribute(positions, 3));
+      geo.setIndex(indices);
+      geo.computeVertexNormals();
+      return geo;
+    }
+
+    const frustumMat = new THREE.MeshStandardMaterial({
+      color: FRUSTUM.color,
+      roughness: FRUSTUM.roughness,
+      metalness: FRUSTUM.metalness,
+      // ✅ (변경사항) 혹시 면 방향/노멀 이슈가 있으면 여기만 DoubleSide로 테스트 가능
+      // side: THREE.DoubleSide
+      side: THREE.FrontSide
+    });
+
+    function addFrustumToFace(faceMesh) {
+      const geo = makeFrustumInsetGeometry({ size: SIZE, inset: FRUSTUM.inset, height: FRUSTUM.height });
+      const m = new THREE.Mesh(geo, frustumMat);
+      m.name = `${faceMesh.userData.faceName || "face"}_frustum`;
+      m.castShadow = true;
+      faceMesh.add(m);
+      return m;
+    }
+
+    // 밑면(D) = 기준면(고정)
+    const bottom = new THREE.Mesh(new THREE.PlaneGeometry(SIZE, SIZE), makeMat("#35b7c9", "D"));
+    bottom.userData.faceName = "bottom";
+    bottom.castShadow = true;
+    root.add(bottom);
+
+    // ✅ D에도 프러스텀 내부 단차 부착
+    addFrustumToFace(bottom);
+
+    function attachInnerArtPlane(wallMesh, insideNormal, {
+      width = 0.75,
+      height = 0.38,
+      wallThickness = 0.06,
+      epsilon = 0.001,
+      margin = 0.06
+    } = {}) {
+      const n = insideNormal.clone().normalize();
+      const w = Math.max(0.05, width - margin);
+      const h = Math.max(0.05, height - margin);
+
+      const { idx, url, tex } = nextArt();
+      const geo = new THREE.PlaneGeometry(w, h);
+
+      // ✅ 작품: 조명/그림자 영향 없이 원본
+      const mat = new THREE.MeshBasicMaterial({ map: tex, side: THREE.FrontSide });
+      mat.toneMapped = false;
+
+      const plane = new THREE.Mesh(geo, mat);
+      plane.name = `${wallMesh.name}_art`;
+      plane.quaternion.setFromUnitVectors(new THREE.Vector3(0,0,1), n);
+      plane.position.copy(n).multiplyScalar(wallThickness/2 + epsilon);
+
+      wallMesh.add(plane);
+
+      plane.userData.isArt = true;
+      plane.userData.artMeta = { idx, url };
+      artPlanes.push(plane);
+
+      return plane;
+    }
+
+    // ✅ 변경사항: endGap으로 코너에서 벽이 서로 "붙을지(0)" / "떨어질지(>0)"를 제어
+    function addInsetFrameWalls(faceMesh, {
+      size = SIZE,
+      wallHeight = 0.5,
+      wallThickness = 0.06,
+      inset = WALL_INSET,   // ✅ frustum top 위에 올라가도록
+      gap = 0.002,
+      endGap = 0.0,
+      sides = ["left","right","front","back"],
+      addArt = true,
+      // ✅ 프러스텀 높이만큼 벽의 바닥을 올려서 "윗면" 위에 서게 함
+      baseZ = FRUSTUM.height
+    } = {}) {
+      const wallMat = new THREE.MeshStandardMaterial({
+        color: 0x2a2a2a,
+        roughness: 0.9,
+        metalness: 0.0
+      });
+
+      const innerHalf = (size / 2) - inset;
+      const span = size - 2 * inset;
+      const spanShort = Math.max(0, span - 2 * endGap);
+
+      // ✅ z는 "위로" 올려서 면 위에 서게 (프러스텀 윗면 높이 baseZ 포함)
+      const zUp = baseZ + wallHeight/2 + gap;
+
+      // Left / Right
+      if (sides.includes("left") || sides.includes("right")) {
+        const wallGeoLR = new THREE.BoxGeometry(wallThickness, spanShort, wallHeight);
+
+        if (sides.includes("left")) {
+          const leftWall = new THREE.Mesh(wallGeoLR, wallMat);
+          leftWall.name = `${faceMesh.userData.faceName || "face"}_wall_left`;
+          leftWall.position.set(-(innerHalf - wallThickness/2), 0, zUp);
+          leftWall.castShadow = true;
+
+          // ✅ left wall의 "전개도 안쪽 방향 법선" = +X
+          if (addArt) attachInnerArtPlane(leftWall, new THREE.Vector3( 1, 0, 0), { width: spanShort, height: wallHeight, wallThickness });
+
+          faceMesh.add(leftWall);
+        }
+
+        if (sides.includes("right")) {
+          const rightWall = new THREE.Mesh(wallGeoLR, wallMat);
+          rightWall.name = `${faceMesh.userData.faceName || "face"}_wall_right`;
+          rightWall.position.set( (innerHalf - wallThickness/2), 0, zUp);
+          rightWall.castShadow = true;
+
+          // ✅ right wall의 "전개도 안쪽 방향 법선" = -X
+          if (addArt) attachInnerArtPlane(rightWall, new THREE.Vector3(-1, 0, 0), { width: spanShort, height: wallHeight, wallThickness });
+
+          faceMesh.add(rightWall);
+        }
+      }
+
+      // Front / Back
+      if (sides.includes("front") || sides.includes("back")) {
+        const wallGeoFB = new THREE.BoxGeometry(spanShort, wallThickness, wallHeight);
+
+        if (sides.includes("front")) {
+          const frontWall = new THREE.Mesh(wallGeoFB, wallMat);
+          frontWall.name = `${faceMesh.userData.faceName || "face"}_wall_front`;
+          frontWall.position.set(0, (innerHalf - wallThickness/2), zUp);
+          frontWall.castShadow = true;
+
+          // ✅ front wall의 "전개도 안쪽 방향 법선" = -Y
+          if (addArt) attachInnerArtPlane(frontWall, new THREE.Vector3(0,-1, 0), { width: spanShort, height: wallHeight, wallThickness });
+
+          faceMesh.add(frontWall);
+        }
+
+        if (sides.includes("back")) {
+          const backWall = new THREE.Mesh(wallGeoFB, wallMat);
+          backWall.name = `${faceMesh.userData.faceName || "face"}_wall_back`;
+          backWall.position.set(0, -(innerHalf - wallThickness/2), zUp);
+          backWall.castShadow = true;
+
+          // ✅ back wall의 "전개도 안쪽 방향 법선" = +Y
+          if (addArt) attachInnerArtPlane(backWall, new THREE.Vector3(0, 1, 0), { width: spanShort, height: wallHeight, wallThickness });
+
+          faceMesh.add(backWall);
+        }
+      }
+    }
+
+    // helper: pivot(경첩축) + mesh 생성
+    function makeHingedFace({ name, color, label, parent, pivotPos, meshPos }) {
+      const pivot = new THREE.Group();
+      pivot.position.copy(pivotPos);
+
+      // ✅ 면은 Plane(겉면/라벨/클릭용)
+      const mesh = new THREE.Mesh(new THREE.PlaneGeometry(SIZE, SIZE), makeMat(color, label));
+      mesh.position.copy(meshPos);
+      mesh.userData.faceName = name;
+      mesh.castShadow = true;
+
+      // ✅ 각 면에 프러스텀 내부 단차 부착
+      addFrustumToFace(mesh);
+
+      pivot.add(mesh);
+      parent.add(pivot);
+
+      return { pivot, mesh };
+    }
+
+    // -------------------------------------------------------
+    // 전개도(UNFOLDED): D가 중앙
+    //
+    //        F
+    //   L    D
+    //        |
+    //        B - R
+    //        |
+    //        U
+    // -------------------------------------------------------
+    const frontHF = makeHingedFace({
+      name: "front", color:"#2d6cdf", label:"F", parent: root,
+      pivotPos: new THREE.Vector3(0,  HALF, 0),
+      meshPos:  new THREE.Vector3(0,  HALF, 0),
+    });
+
+    const backHF = makeHingedFace({
+      name: "back", color:"#c24b4b", label:"B", parent: root,
+      pivotPos: new THREE.Vector3(0, -HALF, 0),
+      meshPos:  new THREE.Vector3(0, -HALF, 0),
+    });
+
+    const leftHF = makeHingedFace({
+      name: "left", color:"#b07bd6", label:"L", parent: root,
+      pivotPos: new THREE.Vector3(-HALF, 0, 0),
+      meshPos:  new THREE.Vector3(-HALF, 0, 0),
+    });
+
+    const rightHF = makeHingedFace({
+      name: "right", color:"#3aa76d", label:"R", parent: backHF.pivot,
+      pivotPos: new THREE.Vector3( HALF, -HALF, 0),
+      meshPos:  new THREE.Vector3( HALF, 0, 0),
+    });
+
+    const topHF = makeHingedFace({
+      name: "top", color:"#d0a43a", label:"U", parent: backHF.pivot,
+      pivotPos: new THREE.Vector3(0, -SIZE, 0),
+      meshPos:  new THREE.Vector3(0, -HALF, 0),
+    });
+
+    // ✅ 면에 "안쪽 프레임 벽" 추가
+    const wallOpts = {
+      wallHeight: 0.5,
+      wallThickness: 0.06,
+      inset: WALL_INSET,
+      baseZ: FRUSTUM.height
+    };
+
+    addInsetFrameWalls(bottom,       { ...wallOpts, sides: ["right"],         endGap: 0.14 });
+    addInsetFrameWalls(frontHF.mesh, { ...wallOpts, sides: ["left","front"],  endGap: 0.14 });
+    addInsetFrameWalls(backHF.mesh,  { ...wallOpts, sides: ["left"],          endGap: 0.14 });
+    addInsetFrameWalls(leftHF.mesh,  { ...wallOpts, sides: ["back","left"],   endGap: 0.14 });
+    addInsetFrameWalls(rightHF.mesh, { ...wallOpts, sides: ["front","right"], endGap: 0.14 });
+    addInsetFrameWalls(topHF.mesh,   { ...wallOpts, sides: ["right","back"],  endGap: 0.14 });
+
+    // ✅ 접힘 상태 클릭 대상: 오직 겉 6면(Plane)만
+    const outerFaces = [bottom, frontHF.mesh, backHF.mesh, leftHF.mesh, rightHF.mesh, topHF.mesh];
+
+    // =========================================================
+    // ✅ 접힘/전개 애니메이션 + 모바일 전개 중 줌아웃(끝나면 딱 고정)
+    // =========================================================
+    const foldedAngles = {
+      front: new THREE.Euler( Math.PI/2, 0, 0),
+      back:  new THREE.Euler(-Math.PI/2, 0, 0),
+      left:  new THREE.Euler(0, Math.PI/2, 0),
+      right: new THREE.Euler(0, -Math.PI/2, 0),
+      top:   new THREE.Euler(-Math.PI/2, 0, 0),
+    };
+
+    let isUnfolded = false;
+
+    function setFoldedInstant() {
+      frontHF.pivot.rotation.copy(foldedAngles.front);
+      backHF.pivot.rotation.copy(foldedAngles.back);
+      leftHF.pivot.rotation.copy(foldedAngles.left);
+      rightHF.pivot.rotation.copy(foldedAngles.right);
+      topHF.pivot.rotation.copy(foldedAngles.top);
+    }
+    setFoldedInstant();
+
+    function setUIVisibleByFoldState() {
+      document.body.classList.toggle("ui-unfolded", isUnfolded);
+    }
+    setUIVisibleByFoldState();
+
+    const anim = {
+      t: 1,
+      duration: 0.75,
+      inProgress: false,
+      from: { front:new THREE.Euler(), back:new THREE.Euler(), left:new THREE.Euler(), right:new THREE.Euler(), top:new THREE.Euler() },
+      to:   { front:new THREE.Euler(), back:new THREE.Euler(), left:new THREE.Euler(), right:new THREE.Euler(), top:new THREE.Euler() },
+      wobble: { duration:0.55, ampUnfold:0.11, ampFold:0.07, freq:2.4, damp:3.2, t:0, inProgress:false }
+    };
+
+    function easeInOutCubic(x) { return x < 0.5 ? 4*x*x*x : 1 - Math.pow(-2*x + 2, 3)/2; }
+
+    function captureFrom() {
+      anim.from.front.copy(frontHF.pivot.rotation);
+      anim.from.back.copy(backHF.pivot.rotation);
+      anim.from.left.copy(leftHF.pivot.rotation);
+      anim.from.right.copy(rightHF.pivot.rotation);
+      anim.from.top.copy(topHF.pivot.rotation);
+    }
+
+    function setTo(unfold) {
+      const z = new THREE.Euler(0,0,0);
+      anim.to.front.copy(unfold ? z : foldedAngles.front);
+      anim.to.back.copy(unfold ? z : foldedAngles.back);
+      anim.to.left.copy(unfold ? z : foldedAngles.left);
+      anim.to.right.copy(unfold ? z : foldedAngles.right);
+      anim.to.top.copy(unfold ? z : foldedAngles.top);
+    }
+
+    function lerpEuler(out, a, b, t) {
+      out.set(
+        THREE.MathUtils.lerp(a.x, b.x, t),
+        THREE.MathUtils.lerp(a.y, b.y, t),
+        THREE.MathUtils.lerp(a.z, b.z, t)
+      );
+    }
+    const tmpE = new THREE.Euler();
+
+    // ✅ 카메라 애니(작품 포커스/홈 복귀용)
+    const camAnim = {
+      t: 1,
+      duration: 0.55,
+      inProgress: false,
+      fromPos: new THREE.Vector3(),
+      toPos: new THREE.Vector3(),
+      fromTarget: new THREE.Vector3(),
+      toTarget: new THREE.Vector3()
+    };
+
+    function startCameraMove(toPos, toTarget) {
+      camAnim.t = 0;
+      camAnim.inProgress = true;
+      camAnim.fromPos.copy(camera.position);
+      camAnim.toPos.copy(toPos);
+      camAnim.fromTarget.copy(controls.target);
+      camAnim.toTarget.copy(toTarget);
+    }
+
+    function updateCameraMove(dt) {
+      if (!camAnim.inProgress) return;
+      camAnim.t = Math.min(1, camAnim.t + dt / camAnim.duration);
+      const k = easeInOutCubic(camAnim.t);
+      camera.position.lerpVectors(camAnim.fromPos, camAnim.toPos, k);
+      controls.target.lerpVectors(camAnim.fromTarget, camAnim.toTarget, k);
+      if (camAnim.t >= 1) camAnim.inProgress = false;
+    }
+
+    // ✅ 눌림 연출
+    const pressAnim = { t:1, duration:0.18, inProgress:false, depth:0.08, squash:0.92, overshoot:1.02 };
+
+    function easeOutCubic(x) { return 1 - Math.pow(1 - x, 3); }
+    function easeOutBack(x) {
+      const c1 = 1.70158, c3 = c1 + 1;
+      return 1 + c3 * Math.pow(x - 1, 3) + c1 * Math.pow(x - 1, 2);
+    }
+
+    function startPress() { pressAnim.t = 0; pressAnim.inProgress = true; }
+
+    function updatePress(dt) {
+      if (!pressAnim.inProgress) return;
+      pressAnim.t = Math.min(1, pressAnim.t + dt / pressAnim.duration);
+
+      const downPhase = 0.45;
+      let yOffset = 0;
+      let zScale = 1;
+
+      if (pressAnim.t < downPhase) {
+        const k = easeOutCubic(pressAnim.t / downPhase);
+        yOffset = -pressAnim.depth * k;
+        zScale = THREE.MathUtils.lerp(1, pressAnim.squash, k);
+      } else {
+        const k = (pressAnim.t - downPhase) / (1 - downPhase);
+        const kk = easeOutBack(k);
+        yOffset = THREE.MathUtils.lerp(-pressAnim.depth, 0, kk);
+        zScale = THREE.MathUtils.lerp(pressAnim.squash, pressAnim.overshoot, kk);
+      }
+
+      root.position.set(rootBasePos.x, rootBasePos.y + yOffset, rootBasePos.z);
+      root.scale.set(rootBaseScale.x, rootBaseScale.y, rootBaseScale.z * zScale);
+
+      if (pressAnim.t >= 1) {
+        pressAnim.inProgress = false;
+        root.position.copy(rootBasePos);
+        root.scale.copy(rootBaseScale);
+      }
+    }
+
+    // ✅ 전개/접힘 후 wobble
+    function applyWobble(dt) {
+      if (!anim.wobble.inProgress) return;
+      anim.wobble.t = Math.min(1, anim.wobble.t + dt / anim.wobble.duration);
+
+      const tt = anim.wobble.t;
+      const amp = isUnfolded ? anim.wobble.ampUnfold : anim.wobble.ampFold;
+
+      const timeSec = tt * anim.wobble.duration;
+      const w = 2 * Math.PI * anim.wobble.freq;
+      const wob = amp * Math.sin(w * timeSec) * Math.exp(-anim.wobble.damp * timeSec);
+
+      frontHF.pivot.rotation.set(anim.to.front.x + wob, anim.to.front.y, anim.to.front.z);
+      backHF.pivot.rotation.set (anim.to.back.x  - wob, anim.to.back.y,  anim.to.back.z);
+      leftHF.pivot.rotation.set (anim.to.left.x,  anim.to.left.y  + wob, anim.to.left.z);
+      rightHF.pivot.rotation.set(anim.to.right.x, anim.to.right.y - wob, anim.to.right.z);
+      topHF.pivot.rotation.set  (anim.to.top.x + wob * 0.85, anim.to.top.y, anim.to.top.z);
+
+      if (anim.wobble.t >= 1) {
+        anim.wobble.inProgress = false;
+        frontHF.pivot.rotation.copy(anim.to.front);
+        backHF.pivot.rotation.copy(anim.to.back);
+        leftHF.pivot.rotation.copy(anim.to.left);
+        rightHF.pivot.rotation.copy(anim.to.right);
+        topHF.pivot.rotation.copy(anim.to.top);
+      }
+    }
+
+    // =========================================================
+    // ✅ 모바일 하단 UI 보정 포함 거리 계산
+    // =========================================================
+    function getBottomOverlayPx() {
+      const vv = window.visualViewport;
+      const viewportH = Math.floor(vv ? vv.height : window.innerHeight);
+
+      const els = [document.getElementById("nav"), document.getElementById("btnHome"), document.getElementById("btnArtist")].filter(Boolean);
+      if (!els.length) return 0;
+
+      let minTop = Infinity;
+      for (const el of els) {
+        const r = el.getBoundingClientRect();
+        minTop = Math.min(minTop, r.top);
+      }
+
+      const isLandscape = matchMedia("(orientation: landscape)").matches;
+      const EXTRA = isLandscape ? 36 : 18;
+      return Math.max(0, (viewportH - minTop) + EXTRA);
+    }
+
+    function getHFov(cam) {
+      const vFov = THREE.MathUtils.degToRad(cam.fov);
+      return 2 * Math.atan(Math.tan(vFov / 2) * cam.aspect);
+    }
+
+    function distanceToFitRectWorldWithBottomUI(rectW, rectH, fit = 1.15) {
+      const vFov = THREE.MathUtils.degToRad(camera.fov);
+      const hFov = getHFov(camera);
+
+      const vv = window.visualViewport;
+      const viewportH = Math.floor(vv ? vv.height : window.innerHeight);
+
+      const bottomPx = getBottomOverlayPx();
+      const isLandscape = matchMedia("(orientation: landscape)").matches;
+      const bMax = isLandscape ? 0.70 : 0.45;
+      const b = Math.min(bMax, Math.max(0, bottomPx / Math.max(1, viewportH)));
+      const usableV = Math.max(0.2, 1 - b);
+
+      const distV = (rectH / 2) / Math.tan(vFov / 2) / usableV;
+      const distH = (rectW / 2) / Math.tan(hFov / 2);
+
+      const fit2 = isLandscape ? (fit * 1.05) : fit;
+      return Math.max(distV, distH) * fit2;
+    }
+
+    // =========================================================
+    // ✅ "최종 전개도" 기준 목표 포즈 (전개 중 카메라 블렌딩용)
+    // =========================================================
+    function computeUnfoldFinalFitPose() {
+      const netW = 3 * SIZE;
+      const netH = 4 * SIZE;
+
+      const localCenter = new THREE.Vector3(0, -SIZE * 0.5, 0);
+      const worldCenter = root.localToWorld(localCenter.clone());
+
+      const dist = distanceToFitRectWorldWithBottomUI(netW, netH, 1.18);
+      const viewDir = camera.position.clone().sub(controls.target).normalize();
+
+      const toTarget = worldCenter.clone();
+      const toPos = worldCenter.clone().add(viewDir.multiplyScalar(dist));
+
+      return { toPos, toTarget };
+    }
+
+    // ✅ 리사이즈에서만 쓰는 "실제 box 기반" refit
+    function computeNetFitPose() {
+      const box = new THREE.Box3().setFromObject(root);
+      const center = new THREE.Vector3();
+      const size = new THREE.Vector3();
+      box.getCenter(center);
+      box.getSize(size);
+
+      const rectW = Math.max(size.x, size.z);
+      const rectH = Math.max(size.y, size.z);
+      const dist = distanceToFitRectWorldWithBottomUI(rectW, rectH, 1.18);
+
+      const viewDir = camera.position.clone().sub(controls.target).normalize();
+      const toTarget = center.clone();
+      const toPos = center.clone().add(viewDir.multiplyScalar(dist));
+      return { toPos, toTarget };
+    }
+
+    function refitNetView(durationSec = 0.0) {
+      const pose = computeNetFitPose();
+      if (durationSec <= 0) {
+        controls.target.copy(pose.toTarget);
+        camera.position.copy(pose.toPos);
+        controls.update();
+      } else {
+        startCameraMove(pose.toPos, pose.toTarget);
+        camAnim.duration = durationSec;
+      }
+    }
+
+    // ✅ 전개 중 카메라 블렌딩 상태
+    const netCamBlend = {
+      active: false,
+      fromPos: new THREE.Vector3(),
+      fromTarget: new THREE.Vector3(),
+      toPos: new THREE.Vector3(),
+      toTarget: new THREE.Vector3()
+    };
+
+    function startTransition(unfold) {
+      anim.t = 0;
+      anim.inProgress = true;
+      anim.wobble.inProgress = false;
+      anim.wobble.t = 0;
+
+      captureFrom();
+      setTo(unfold);
+
+      // ✅ 모바일에서 unfold(전개)할 때만 카메라 블렌딩
+      const doMobileZoomOut = unfold && isMobileView() && !camAnim.inProgress;
+
+      if (doMobileZoomOut) {
+        const pose = computeUnfoldFinalFitPose();
+        netCamBlend.active = true;
+        netCamBlend.fromPos.copy(camera.position);
+        netCamBlend.fromTarget.copy(controls.target);
+        netCamBlend.toPos.copy(pose.toPos);
+        netCamBlend.toTarget.copy(pose.toTarget);
+      } else {
+        netCamBlend.active = false;
+      }
+    }
+
+    function updateTransition(dt) {
+      if (anim.inProgress) {
+        anim.t = Math.min(1, anim.t + dt / anim.duration);
+        const k = easeInOutCubic(anim.t);
+
+        lerpEuler(tmpE, anim.from.front, anim.to.front, k); frontHF.pivot.rotation.copy(tmpE);
+        lerpEuler(tmpE, anim.from.back,  anim.to.back,  k); backHF.pivot.rotation.copy(tmpE);
+        lerpEuler(tmpE, anim.from.left,  anim.to.left,  k); leftHF.pivot.rotation.copy(tmpE);
+        lerpEuler(tmpE, anim.from.right, anim.to.right, k); rightHF.pivot.rotation.copy(tmpE);
+        lerpEuler(tmpE, anim.from.top,   anim.to.top,   k); topHF.pivot.rotation.copy(tmpE);
+
+        // ✅ 모바일 전개 중: 전개 애니 진행률에 맞춰 카메라 줌아웃
+        // ✅ (변경사항) isUnfolded 조건 제거: netCamBlend.active가 전개시에만 true라 이것만으로 충분
+        if (netCamBlend.active && !camAnim.inProgress) {
+          camera.position.lerpVectors(netCamBlend.fromPos, netCamBlend.toPos, k);
+          controls.target.lerpVectors(netCamBlend.fromTarget, netCamBlend.toTarget, k);
+          controls.update();
+        }
+
+        if (anim.t >= 1) {
+          anim.inProgress = false;
+          anim.wobble.t = 0;
+          anim.wobble.inProgress = true;
+
+          setUIVisibleByFoldState();
+
+          if (!isUnfolded) {
+            hideInfo();
+            hideArtistInfo();
+          }
+
+          // ✅ 전개 완료 후 "툭" 방지: 끝 포즈로 확정만
+          if (isUnfolded && netCamBlend.active) {
+            camera.position.copy(netCamBlend.toPos);
+            controls.target.copy(netCamBlend.toTarget);
+            controls.update();
+            netCamBlend.active = false;
+          }
+        }
+      }
+
+      applyWobble(dt);
+    }
+
+    // =========================================================
+    // ✅ 버튼 / 작품 포커스
+    // =========================================================
+    function focusArtPlane(plane, idxToSet = null) {
+      if (!plane) return;
+
+      const center = new THREE.Vector3();
+      plane.getWorldPosition(center);
+
+      const q = new THREE.Quaternion();
+      plane.getWorldQuaternion(q);
+      const normal = new THREE.Vector3(0,0,1).applyQuaternion(q).normalize();
+
+      const box = new THREE.Box3().setFromObject(plane);
+      const size = new THREE.Vector3();
+      box.getSize(size);
+      const maxDim = Math.max(size.x, size.y, size.z);
+
+      const distance = THREE.MathUtils.clamp(maxDim * 2.4, 0.9, 4.0);
+      const toPos = center.clone().add(normal.multiplyScalar(distance));
+      const toTarget = center.clone();
+
+      startCameraMove(toPos, toTarget);
+      if (typeof idxToSet === "number") currentArtIdx = idxToSet;
+    }
+
+    function focusArtByIndex(nextIdx) {
+      if (!artPlanes.length) return;
+      const i = ((nextIdx % artPlanes.length) + artPlanes.length) % artPlanes.length;
+      focusArtPlane(artPlanes[i], i);
+    }
+
+    btnPrev.addEventListener("click", () => {
+      hideArtistInfo();
+      if (currentArtIdx < 0) focusArtByIndex(0);
+      else focusArtByIndex(currentArtIdx - 1);
+    });
+
+    btnNext.addEventListener("click", () => {
+      hideArtistInfo();
+      if (currentArtIdx < 0) focusArtByIndex(0);
+      else focusArtByIndex(currentArtIdx + 1);
+    });
+
+    btnInfo.addEventListener("click", () => toggleArtInfo());
+    btnArtist.addEventListener("click", () => toggleArtistInfo());
+
+    // ✅ 홈(초기화)
+    const HOME_CAM_POS = camera.position.clone();
+    const HOME_TARGET  = controls.target.clone();
+
+    function goHome() {
+      hideInfo();
+      hideArtistInfo();
+      currentArtIdx = -1;
+      startCameraMove(HOME_CAM_POS.clone(), HOME_TARGET.clone());
+    }
+    btnHome.addEventListener("click", () => goHome());
+
+    // =========================================================
+    // ✅ 클릭(Raycaster) + 드래그 판정
+    // =========================================================
+    const raycaster = new THREE.Raycaster();
+    const pointer = new THREE.Vector2();
+
+    let pointerDown = false;
+    let moved = false;
+    let downX = 0, downY = 0;
+    const DRAG_THRESHOLD_PX = 4;
+
+    // ✅ (변경사항) 힌트(#hint) 클릭도 UI로 간주해서 캔버스 클릭(접힘/전개) 방지
+    const UI_SELECTOR = "#nav, #info, #artistInfo, #btnHome, #btnArtist, #hint";
+
+    renderer.domElement.addEventListener("pointerdown", (e) => {
+      if (e.target?.closest && e.target.closest(UI_SELECTOR)) return;
+      pointerDown = true;
+      moved = false;
+      downX = e.clientX;
+      downY = e.clientY;
+    });
+
+    renderer.domElement.addEventListener("pointermove", (e) => {
+      if (!pointerDown) return;
+      const dx = e.clientX - downX;
+      const dy = e.clientY - downY;
+      if (dx * dx + dy * dy > DRAG_THRESHOLD_PX * DRAG_THRESHOLD_PX) moved = true;
+    });
+
+    renderer.domElement.addEventListener("pointerup", (e) => {
+      if (!pointerDown) return;
+      pointerDown = false;
+
+      if (moved) return;
+      if (e.target?.closest && e.target.closest(UI_SELECTOR)) return;
+
+      const rect = renderer.domElement.getBoundingClientRect();
+      pointer.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+      pointer.y = -(((e.clientY - rect.top) / rect.height) * 2 - 1);
+
+      raycaster.setFromCamera(pointer, camera);
+
+      // ✅ 접힘 상태: 겉 6면만 (recursive=false)
+      // ✅ 전개 상태: 내부(작품)까지 (recursive=true)
+      const hits = raycaster.intersectObjects(outerFaces, isUnfolded /* recursive */);
+      if (!hits.length) return;
+
+      if (!isUnfolded) {
+        const hitObj = hits[0].object;
+        if (!outerFaces.includes(hitObj)) return;
+
+        if (anim.inProgress) return;
+        startPress();
+
+        isUnfolded = true;
+        startTransition(true);
+        return;
+      }
+
+      // ✅ 전개 상태: 작품 클릭 우선
+      const artHit = hits.find(h => h.object?.userData?.isArt);
+      if (artHit) {
+        const plane = artHit.object;
+        const idx = artPlanes.indexOf(plane);
+        focusArtPlane(plane, idx >= 0 ? idx : null);
+        return;
+      }
+
+      // ✅ 전개 상태에서 면 클릭 = 접힘
+      if (anim.inProgress) return;
+      startPress();
+      isUnfolded = false;
+      startTransition(false);
+    });
+
+    // 키보드(선택)
+    window.addEventListener("keydown", (ev) => {
+      if (ev.key === "Escape") {
+        hideInfo();
+        hideArtistInfo();
+        goHome();
+      } else if (ev.key === "ArrowRight") {
+        if (currentArtIdx < 0) focusArtByIndex(0);
+        else focusArtByIndex(currentArtIdx + 1);
+      } else if (ev.key === "ArrowLeft") {
+        if (currentArtIdx < 0) focusArtByIndex(artPlanes.length - 1);
+        else focusArtByIndex(currentArtIdx - 1);
+      }
+    });
+
+    // =========================================================
+    // ✅ 모바일/회전 대응 리사이즈
+    // - "전개 후 툭"을 만들지 않기 위해, 리사이즈에서만 refit 수행
+    // =========================================================
+    let lastW = 0, lastH = 0;
+
+    function resizeToViewport(force = false) {
+      if (!force && isUserControlling) return false;
+
+      const vv = window.visualViewport;
+      let cssW = Math.floor(vv ? vv.width : window.innerWidth);
+      let cssH = Math.floor(vv ? vv.height : window.innerHeight);
+
+      const MIN_W = 200, MIN_H = 200;
+      if (cssW < MIN_W || cssH < MIN_H) return false;
+
+      cssW = Math.max(1, cssW);
+      cssH = Math.max(1, cssH);
+
+      if (!force && cssW === lastW && cssH === lastH) return false;
+      lastW = cssW; lastH = cssH;
+
+      const pr = Math.min(devicePixelRatio, 2);
+      renderer.setPixelRatio(pr);
+      renderer.setSize(cssW, cssH, true);
+
+      camera.aspect = cssW / cssH;
+      camera.updateProjectionMatrix();
+      return true;
+    }
+
+    let resizeScheduled = false;
+    function scheduleStableResize(force = false) {
+      if (resizeScheduled) return;
+      resizeScheduled = true;
+
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          resizeScheduled = false;
+          if (!force && isUserControlling) return;
+
+          if (!resizeToViewport(force)) {
+            setTimeout(() => {
+              if (resizeToViewport(force) && isUnfolded) refitNetView(0.0);
+            }, 120);
+          } else {
+            if (isUnfolded) refitNetView(0.0);
+          }
+        });
+      });
+    }
+
+    resizeToViewport(true);
+
+    window.addEventListener("resize", () => scheduleStableResize(false));
+    window.addEventListener("orientationchange", () => scheduleStableResize(true));
+    if (window.visualViewport) {
+      visualViewport.addEventListener("resize", () => scheduleStableResize(false));
+    }
+
+    renderer.domElement.addEventListener("webglcontextlost", (e) => {
+      e.preventDefault();
+      console.warn("[WebGL] context lost");
+    }, false);
+
+    renderer.domElement.addEventListener("webglcontextrestored", () => {
+      console.warn("[WebGL] context restored");
+      scheduleStableResize(true);
+    }, false);
+
+    // =========================================================
+    // ✅ 루프
+    // =========================================================
+    const clock = new THREE.Clock();
+    function tick() {
+      const dt = clock.getDelta();
+
+      resizeToViewport(false);
+
+      controls.update();
+      updatePress(dt);
+      updateTransition(dt);
+      updateCameraMove(dt);
+
+      renderer.render(scene, camera);
+      requestAnimationFrame(tick);
+    }
+    tick();
+  </script>
+</body>
+</html>
