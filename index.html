@@ -806,6 +806,34 @@
         metalness: 0.0
       });
 
+      // =========================================================
+      // ✅ (추가) "벽은 없애고 작품만 남기기" 옵션
+      // - 주의: visible=false는 자식(작품)까지 같이 숨겨짐
+      // - 따라서 벽 Mesh는 visible=true 유지하고, "벽만" 보이지 않게(material) 처리한다.
+      // =========================================================
+      const HIDE_WALLS = true;
+
+      // ✅ (추가) 벽을 "렌더만" 안 하게 만드는 유틸
+      // - colorWrite=false : 색상 출력 X (완전 투명처럼)
+      // - depthWrite=false : 깊이버퍼에 안 써서 작품 가림/이상 현상 감소
+      // - transparent/opacity=0 : 혹시 엔진/드라이버별 처리 보조
+      function makeWallInvisibleButKeepChildren(mesh) {
+        if (!mesh) return;
+        const m = mesh.material?.clone ? mesh.material.clone() : mesh.material;
+        if (m) {
+          m.transparent = true;
+          m.opacity = 0.0;
+          // @ts-ignore
+          m.depthWrite = false;
+          // @ts-ignore
+          m.colorWrite = false;
+          mesh.material = m;
+        }
+        mesh.castShadow = false;
+        mesh.receiveShadow = false;
+        // mesh.visible은 건드리지 않는다(자식 렌더링 유지)
+      }
+
       const innerHalf = (size / 2) - inset;
       const span = size - 2 * inset;
       const spanShort = Math.max(0, span - 2 * endGap);
@@ -826,6 +854,11 @@
           // ✅ left wall의 "전개도 안쪽 방향 법선" = +X
           if (addArt) attachInnerArtPlane(leftWall, new THREE.Vector3( 1, 0, 0), { width: spanShort, height: wallHeight, wallThickness });
 
+          // =========================================================
+          // ✅ (수정) 벽만 숨기기: 자식(작품)은 그대로 보이게
+          // =========================================================
+          if (HIDE_WALLS) makeWallInvisibleButKeepChildren(leftWall);
+
           faceMesh.add(leftWall);
         }
 
@@ -837,6 +870,11 @@
 
           // ✅ right wall의 "전개도 안쪽 방향 법선" = -X
           if (addArt) attachInnerArtPlane(rightWall, new THREE.Vector3(-1, 0, 0), { width: spanShort, height: wallHeight, wallThickness });
+
+          // =========================================================
+          // ✅ (수정) 벽만 숨기기: 자식(작품)은 그대로 보이게
+          // =========================================================
+          if (HIDE_WALLS) makeWallInvisibleButKeepChildren(rightWall);
 
           faceMesh.add(rightWall);
         }
@@ -855,6 +893,11 @@
           // ✅ front wall의 "전개도 안쪽 방향 법선" = -Y
           if (addArt) attachInnerArtPlane(frontWall, new THREE.Vector3(0,-1, 0), { width: spanShort, height: wallHeight, wallThickness });
 
+          // =========================================================
+          // ✅ (수정) 벽만 숨기기: 자식(작품)은 그대로 보이게
+          // =========================================================
+          if (HIDE_WALLS) makeWallInvisibleButKeepChildren(frontWall);
+
           faceMesh.add(frontWall);
         }
 
@@ -866,6 +909,11 @@
 
           // ✅ back wall의 "전개도 안쪽 방향 법선" = +Y
           if (addArt) attachInnerArtPlane(backWall, new THREE.Vector3(0, 1, 0), { width: spanShort, height: wallHeight, wallThickness });
+
+          // =========================================================
+          // ✅ (수정) 벽만 숨기기: 자식(작품)은 그대로 보이게
+          // =========================================================
+          if (HIDE_WALLS) makeWallInvisibleButKeepChildren(backWall);
 
           faceMesh.add(backWall);
         }
