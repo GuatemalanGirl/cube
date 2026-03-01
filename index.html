@@ -521,12 +521,26 @@
           const maxAniso = renderer.capabilities.getMaxAnisotropy ? renderer.capabilities.getMaxAnisotropy() : 8;
           t.anisotropy = Math.min(8, maxAniso);
           t.needsUpdate = true;
+
+          // ✅ (추가) 텍스처 로드 완료 알림(작품 박스 비율 맞추기용)
+          const cbs = t.userData?.__onReady;
+          if (Array.isArray(cbs)) {
+            for (const cb of cbs) {
+              try { cb(t); } catch (e) { console.warn(e); }
+            }
+            t.userData.__onReady.length = 0;
+          }
         },
         undefined,
         (err) => console.error("Texture load failed:", url, err)
       );
 
       tex.colorSpace = THREE.SRGBColorSpace;
+
+      // ✅ (추가) onReady 콜백 배열 준비
+      tex.userData = tex.userData || {};
+      tex.userData.__onReady = tex.userData.__onReady || [];
+
       texCache.set(url, tex);
       return tex;
     }
@@ -572,6 +586,25 @@
     // =========================================================
     function isMobileView() {
       return matchMedia("(pointer: coarse)").matches || matchMedia("(max-width: 768px)").matches;
+    }
+
+    // =========================================================
+    // ✅ (추가) 노멀 + 업벡터까지 고정해서 "이미지 회전" 문제 방지
+    // - setFromUnitVectors는 "앞(노멀)"만 맞추고 roll(회전)이 미정이라 벽면별로 90° 회전될 수 있음
+    // =========================================================
+    function setOrientationFromNormalAndUp(obj, normalLocal, upLocal = new THREE.Vector3(0,0,1)) {
+      const z = normalLocal.clone().normalize(); // obj의 +Z가 향할 방향(벽 안쪽)
+      let y = upLocal.clone().normalize();       // obj의 +Y(이미지 위쪽)로 쓸 방향
+
+      // up과 normal이 거의 평행이면 다른 up을 사용
+      if (Math.abs(y.dot(z)) > 0.999) y.set(0, 1, 0);
+
+      // 정규직교 기저 구성
+      const x = new THREE.Vector3().crossVectors(y, z).normalize();
+      y = new THREE.Vector3().crossVectors(z, x).normalize();
+
+      const m = new THREE.Matrix4().makeBasis(x, y, z);
+      obj.quaternion.setFromRotationMatrix(m);
     }
 
     // =========================================================
@@ -673,31 +706,85 @@
       height = 0.38,
       wallThickness = 0.06,
       epsilon = 0.001,
-      margin = 0.06
+      margin = 0.06,
+
+      // ✅ (추가) 작품 두께(액자 두께)
+      artDepth = 0.03,
+
+      // ✅ (추가) 옆면/뒷면 색(프레임 느낌)
+      frameColor = 0x111111
     } = {}) {
       const n = insideNormal.clone().normalize();
-      const w = Math.max(0.05, width - margin);
-      const h = Math.max(0.05, height - margin);
+
+      // ✅ 벽면 안에서 작품이 들어갈 수 있는 최대 영역(여백 포함)
+      const maxW = Math.max(0.05, width  - margin);
+      const maxH = Math.max(0.05, height - margin);
 
       const { idx, url, tex } = nextArt();
-      const geo = new THREE.PlaneGeometry(w, h);
 
-      // ✅ 작품: 조명/그림자 영향 없이 원본
-      const mat = new THREE.MeshBasicMaterial({ map: tex, side: THREE.FrontSide });
-      mat.toneMapped = false;
+      // ✅ (변경) 1x1xDepth 박스로 만들고, 로드 후 스케일로 비율 맞춤
+      const geo = new THREE.BoxGeometry(1, 1, artDepth);
 
-      const plane = new THREE.Mesh(geo, mat);
-      plane.name = `${wallMesh.name}_art`;
-      plane.quaternion.setFromUnitVectors(new THREE.Vector3(0,0,1), n);
-      plane.position.copy(n).multiplyScalar(wallThickness/2 + epsilon);
+      // ✅ 앞면(이미지): 조명/그림자 영향 없이 원본
+      const frontMat = new THREE.MeshBasicMaterial({ map: tex });
+      frontMat.toneMapped = false;
 
-      wallMesh.add(plane);
+      // ✅ 옆/뒤(프레임): 단색
+      const sideMat = new THREE.MeshBasicMaterial({ color: frameColor });
+      sideMat.toneMapped = false;
 
-      plane.userData.isArt = true;
-      plane.userData.artMeta = { idx, url };
-      artPlanes.push(plane);
+      // ✅ BoxGeometry 재질 순서(Three 기본):
+      // [ +X, -X, +Y, -Y, +Z, -Z ]
+      // 여기서 +Z가 “앞면”이므로, 이미지 매트는 index 4에 넣는다.
+      const mats = [sideMat, sideMat, sideMat, sideMat, frontMat, sideMat];
 
-      return plane;
+      const box = new THREE.Mesh(geo, mats);
+      box.name = `${wallMesh.name}_art`;
+
+      // ✅ (변경) 노멀 + 업(벽의 세로축=로컬 +Z)까지 고정 → 회전 뒤집힘/90도 회전 방지
+      setOrientationFromNormalAndUp(box, n, new THREE.Vector3(0,0,1));
+
+      // ✅ (중요) 박스는 두께가 있으니, 벽에서 (벽두께/2 + epsilon + 박스두께/2)만큼 띄운다
+      box.position.copy(n).multiplyScalar(wallThickness/2 + epsilon + artDepth/2);
+
+      // ✅ (추가) 원본 비율 유지 “contain” fit
+      function applyContainFit(texture) {
+        const img = texture?.image;
+        if (!img || !img.width || !img.height) return;
+
+        const aspect = img.width / img.height; // 원본 비율
+        let w = maxW;
+        let h = maxH;
+
+        // contain: 최대 영역 안에 들어오게 (비율 유지)
+        if (w / h > aspect) {
+          h = maxH;
+          w = h * aspect;
+        } else {
+          w = maxW;
+          h = w / aspect;
+        }
+
+        // ✅ 박스 스케일로 크기 적용 (depth는 고정 두께 유지)
+        box.scale.set(w, h, 1);
+      }
+
+      // 이미 로드된 텍스처면 즉시 적용, 아니면 로드 완료 시 적용
+      if (tex.image && tex.image.width) {
+        applyContainFit(tex);
+      } else {
+        tex.userData = tex.userData || {};
+        tex.userData.__onReady = tex.userData.__onReady || [];
+        tex.userData.__onReady.push(applyContainFit);
+      }
+
+      wallMesh.add(box);
+
+      box.userData.isArt = true;
+      box.userData.artMeta = { idx, url };
+      artPlanes.push(box);
+
+      return box;
     }
 
     // ✅ 변경사항: endGap으로 코너에서 벽이 서로 "붙을지(0)" / "떨어질지(>0)"를 제어
