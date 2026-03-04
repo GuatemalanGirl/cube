@@ -314,11 +314,10 @@
   <div id="loadingOverlay" aria-live="polite" aria-label="Loading">
     <div id="loadingInner">
       <img id="loadingLogo" src="./textures/logo.png" alt="logo" onerror="this.style.display='none'">
-      <div>Loading…</div>
     </div>
   </div>
 
-  <div id="hint">Click cube: 접힘/전개 • (전개 후) Click artwork: 줌인 • ‹/›: 작품 이동 • ?: 정보</div>
+  <div id="hint">박스는 펼쳐서 버려주세요_test</div>
 
   <!-- ✅ 작품 정보 -->
   <div id="info" role="dialog" aria-live="polite">
@@ -398,15 +397,15 @@
     // ✅ 작가 정보(2번 구조 그대로)
     const ARTIST_TEXT = {
       title: "작가 정보",
-      line: "장(예시) · 인터페이스 이식",
+      line: "1234",
       medium: "",
       desc:
-        `여기에 작가 소개/약력 텍스트를 넣으면 됩니다.
+        `작가 소개
 
 - i : 작가 정보 토글
 - ? : 현재 작품 정보 토글
-- ‹/› : 작품(벽면) 순환 포커스
-- ⌂ : 초기 카메라로 복귀`
+- ‹/› : 시점 이동
+- ▣ : 초기 박스로 복귀`
     };
 
     function showArtistInfo() {
@@ -543,11 +542,18 @@
       const ctx = c.getContext("2d");
       ctx.fillStyle = color;
       ctx.fillRect(0, 0, 256, 256);
-      ctx.fillStyle = "rgba(255,255,255,.9)";
-      ctx.font = "bold 56px system-ui";
-      ctx.textAlign = "center";
-      ctx.textBaseline = "middle";
-      ctx.fillText(label, 128, 128);
+
+      // =========================================================
+      // ✅ (변경사항) 면 라벨(F/B/L/R/U/D) 표시 제거
+      // - label이 있을 때만 텍스트를 그리도록 변경
+      // =========================================================
+      if (label) {
+        ctx.fillStyle = "rgba(255,255,255,.9)";
+        ctx.font = "bold 56px system-ui";
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.fillText(label, 128, 128);
+      }
 
       const tex = new THREE.CanvasTexture(c);
       tex.colorSpace = THREE.SRGBColorSpace;
@@ -574,10 +580,10 @@
     const GOGH_THUMB_URLS = GOGH_ORIGINAL_URLS.map(u => toWikimediaThumbUrl(u, 512));
 
     const ART_TEXT = [
-      { title: "Starry Night", artist: "Vincent van Gogh", year: "1889", medium: "Oil on canvas", desc: "(예시) 작품 설명을 여기에 넣으세요." },
-      { title: "Sunflowers", artist: "Vincent van Gogh", year: "1888", medium: "Oil on canvas", desc: "(예시) 작품 설명을 여기에 넣으세요." },
-      { title: "The Bedroom", artist: "Vincent van Gogh", year: "1888", medium: "Oil on canvas", desc: "(예시) 작품 설명을 여기에 넣으세요." },
-      { title: "Irises", artist: "Vincent van Gogh", year: "1889", medium: "Oil on canvas", desc: "(예시) 작품 설명을 여기에 넣으세요." },
+      { title: "Starry Night", artist: "Vincent van Gogh", year: "1889", medium: "Oil on canvas", desc: "작품 설명" },
+      { title: "Sunflowers", artist: "Vincent van Gogh", year: "1888", medium: "Oil on canvas", desc: "작품 설명" },
+      { title: "The Bedroom", artist: "Vincent van Gogh", year: "1888", medium: "Oil on canvas", desc: "작품 설명" },
+      { title: "Irises", artist: "Vincent van Gogh", year: "1889", medium: "Oil on canvas", desc: "작품 설명" },
     ];
 
     const texLoader = new THREE.TextureLoader(manager);
@@ -764,7 +770,7 @@
     }
 
     // 밑면(D) = 기준면(고정)
-    const bottom = new THREE.Mesh(new THREE.PlaneGeometry(SIZE, SIZE), makeMat("#35b7c9", "D"));
+    const bottom = new THREE.Mesh(new THREE.PlaneGeometry(SIZE, SIZE), makeMat("#35b7c9", "")); // ✅ (변경사항) label 제거
     bottom.userData.faceName = "bottom";
     bottom.castShadow = true;
     root.add(bottom);
@@ -780,7 +786,7 @@
       margin = 0.06,
 
       // ✅ (추가) 작품 두께(액자 두께)
-      artDepth = 0.03,
+      artDepth = 0.02,
 
       // ✅ (추가) 옆면/뒷면 색(프레임 느낌)
       frameColor = 0x111111
@@ -1022,31 +1028,31 @@
     //        U
     // -------------------------------------------------------
     const frontHF = makeHingedFace({
-      name: "front", color: "#2d6cdf", label: "F", parent: root,
+      name: "front", color: "#2d6cdf", label: "", parent: root,  // ✅ (변경사항) label 제거
       pivotPos: new THREE.Vector3(0, HALF, 0),
       meshPos: new THREE.Vector3(0, HALF, 0),
     });
 
     const backHF = makeHingedFace({
-      name: "back", color: "#c24b4b", label: "B", parent: root,
+      name: "back", color: "#c24b4b", label: "", parent: root,   // ✅ (변경사항) label 제거
       pivotPos: new THREE.Vector3(0, -HALF, 0),
       meshPos: new THREE.Vector3(0, -HALF, 0),
     });
 
     const leftHF = makeHingedFace({
-      name: "left", color: "#b07bd6", label: "L", parent: root,
+      name: "left", color: "#b07bd6", label: "", parent: root,   // ✅ (변경사항) label 제거
       pivotPos: new THREE.Vector3(-HALF, 0, 0),
       meshPos: new THREE.Vector3(-HALF, 0, 0),
     });
 
     const rightHF = makeHingedFace({
-      name: "right", color: "#3aa76d", label: "R", parent: backHF.pivot,
+      name: "right", color: "#3aa76d", label: "", parent: backHF.pivot, // ✅ (변경사항) label 제거
       pivotPos: new THREE.Vector3(HALF, -HALF, 0),
       meshPos: new THREE.Vector3(HALF, 0, 0),
     });
 
     const topHF = makeHingedFace({
-      name: "top", color: "#d0a43a", label: "U", parent: backHF.pivot,
+      name: "top", color: "#d0a43a", label: "", parent: backHF.pivot,   // ✅ (변경사항) label 제거
       pivotPos: new THREE.Vector3(0, -SIZE, 0),
       meshPos: new THREE.Vector3(0, -HALF, 0),
     });
@@ -1136,7 +1142,7 @@
     // ✅ 카메라 애니(작품 포커스/홈 복귀용)
     const camAnim = {
       t: 1,
-      duration: 0.55,
+      duration: 1.20,
       inProgress: false,
       fromPos: new THREE.Vector3(),
       toPos: new THREE.Vector3(),
